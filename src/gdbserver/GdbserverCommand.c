@@ -26,3 +26,17 @@ void GdbserverCommand(void)
 
     handle_client(connfd);
 }
+
+void GdbserverCommandPipe(void)
+{
+    if (target_reset()) {
+        Fail("Can't reset target!\n");
+    }
+    
+    Wsl("Target ready, waiting for GDB connection.");
+    fprintf(stderr, "%s", "\r\nInfo : avrchip: hardware has something\r\n");    //vscode check stderr for start, mimic a openocd process
+    fflush(stderr);
+    
+    handle_client(STDIN_FILENO);
+}
+

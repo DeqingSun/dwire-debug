@@ -88,6 +88,7 @@ struct {char *name; char *help; int requiresConnection; void (*handler)();} Comm
   {"help",        "Help",                                          0, HelpCommand},
   {"verbose",     "Set verbose mode",                              0, VerboseCommand},
   {"gdbserver",   "Start server for GDB",                          1, GdbserverCommand},
+  {"gdbpipe",     "Start server on pipe for GDB",                  1, GdbserverCommandPipe},
   {"",            0,                                               0, EmptyCommand},
 };
 

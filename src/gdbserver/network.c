@@ -53,7 +53,9 @@ void handle_client(int connfd)
         handle_command(connfd, cmd);
     }
 
-    Close((FileHandle)connfd);
+    if ( connfd != STDIN_FILENO ){
+        Close((FileHandle)connfd);
+    }
 
     return;
 }
