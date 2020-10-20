@@ -8,6 +8,7 @@
 #include "commandline/commandline.c"
 #include "commands/commands.c"
 #include "gdbserver/gdbserver.c"
+#include "tinyisp/tinyisp.c"
 #include "ui/ui.c"
 
 

@@ -89,6 +89,7 @@ struct {char *name; char *help; int requiresConnection; void (*handler)();} Comm
   {"verbose",     "Set verbose mode",                              0, VerboseCommand},
   {"gdbserver",   "Start server for GDB",                          1, GdbserverCommand},
   {"gdbpipe",     "Start server on pipe for GDB",                  1, GdbserverCommandPipe},
+  {"dwen",        "enable the debugWIRE with ISP",                 0, DwenCommand},
   {"",            0,                                               0, EmptyCommand},
 };
 
