@@ -34,9 +34,22 @@ void DwenCommand(void) {
       if (!handletiny) { handletiny = usb_open(convertedPort->device); }
       if (!handletiny) { Wsl("Can not connect to TinyISP"); return; }
         
-        
-      //TODO: maybe try dw first? before use ISP
-      //printf("TODO: maybe try dw first? before use ISP\n");
+      //Try dw first before use ISP
+      for (int tries=0; tries<5; tries++) {
+        // Tell digispark to send a break and capture any returned pulse timings
+        int status = usb_control_msg(handletiny, OUT_TO_LW, 60, 33, 0, 0, 0, USB_TIMEOUT);
+        if (status < 0) {
+          goto END_TINYSPI_ACCESS;
+        } else {
+          delay(120); // Wait while digispark sends break and reads back pulse timings
+          for (int triesBaud=0; triesBaud<5; triesBaud++) {
+            uint16_t times[64];
+            delay(20);
+            int statusBaud = usb_control_msg(handletiny, IN_FROM_LW, 60, 0, 0, (char*)times, sizeof(times), USB_TIMEOUT);
+            if (statusBaud >=18 ) goto END_TINYSPI_ACCESS;  //dw can be connect, no need to use ISP
+          }
+        }
+      }
 
       usb_control_msg(handletiny, OUT_TO_LW, USBTINY_POWERUP, 0x0A, 0, 0, 0, USB_TIMEOUT);
       
