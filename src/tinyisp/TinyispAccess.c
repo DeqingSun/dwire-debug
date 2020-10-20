@@ -23,6 +23,9 @@ enum
 };
 
 void DwenCommand(void) {
+  unsigned char spiExchange[4];
+  unsigned int signatureBytes = 0;
+  
   for (int i=0;i<PortCount;i++){
     if (Ports[i]->kind == 'u'){
       struct UPort* convertedPort = (struct UPort*)Ports[i];
@@ -30,12 +33,64 @@ void DwenCommand(void) {
       if (convertedPort->handle) { handletiny = convertedPort->handle; }
       if (!handletiny) { handletiny = usb_open(convertedPort->device); }
       if (!handletiny) { Wsl("Can not connect to TinyISP"); return; }
+        
+        
+      //TODO: maybe try dw first? before use ISP
+      //printf("TODO: maybe try dw first? before use ISP\n");
 
       usb_control_msg(handletiny, OUT_TO_LW, USBTINY_POWERUP, 0x0A, 0, 0, 0, USB_TIMEOUT);
-
-            
+      
+      //value endianness is different between computer and isptiny
+      usb_control_msg(handletiny, IN_FROM_LW, USBTINY_SPI, 0x53ac, 0, (char *)spiExchange, 4, USB_TIMEOUT);
+      if ( spiExchange[2] != 0x53) goto END_TINYSPI_ACCESS;
+      
+      //value endianness is different between computer and isptiny
+      //Read Vendor Code at Address $00
+      usb_control_msg(handletiny, IN_FROM_LW, USBTINY_SPI, 0x0030, 0, (char *)spiExchange, 4, USB_TIMEOUT);
+      //1E indicates manufactured by Atmel
+      if ( spiExchange[3] != 0x1E) goto END_TINYSPI_ACCESS;
+      signatureBytes |= spiExchange[3]<<16;
+        
+      //Read Vendor Code at Address $01
+      usb_control_msg(handletiny, IN_FROM_LW, USBTINY_SPI, 0x0030, 0x01, (char *)spiExchange, 4, USB_TIMEOUT);
+      signatureBytes |= spiExchange[3]<<8;
+      //Read Vendor Code at Address $02
+      usb_control_msg(handletiny, IN_FROM_LW, USBTINY_SPI, 0x0030, 0x02, (char *)spiExchange, 4, USB_TIMEOUT);
+      signatureBytes |= spiExchange[3]<<0;
+      
+      //printf("signatureBytes: %06X\n",signatureBytes);
+      
+      //change to a look up table in future
+      if ( signatureBytes == 0x1E950F ){  //ATmega328P
+        //Read high bits
+        usb_control_msg(handletiny, IN_FROM_LW, USBTINY_SPI, 0x0858, 0x00, (char *)spiExchange, 4, USB_TIMEOUT);
+        unsigned char fuseHighByte =  spiExchange[3];
+        //printf("initial fuseHighByte %02X \n",fuseHighByte);
+        
+        if ( (fuseHighByte&(1<<6))==0 ) goto END_TINYSPI_ACCESS;  //already in DWEN
+        
+        //enable DWEN
+        fuseHighByte &= ~(1<<6);
+        //disable BOOTRST
+        fuseHighByte |= (1<<0);
+        
+        //Write high bits
+        usb_control_msg(handletiny, OUT_TO_LW, USBTINY_SPI, 0xA8AC, fuseHighByte<<8, 0, 0, USB_TIMEOUT);
+        
+        delay(5);
+        //Read high bits
+        usb_control_msg(handletiny, IN_FROM_LW, USBTINY_SPI, 0x0858, 0x00, (char *)spiExchange, 4, USB_TIMEOUT);
+        if (fuseHighByte !=  spiExchange[3]){
+          printf("fuseHighByte written %02X is not equal to read back value %02X\n",fuseHighByte,spiExchange[3]);
+        }   
+      
+      }
+      
+      
+      
+END_TINYSPI_ACCESS:      
       usb_control_msg(handletiny, OUT_TO_LW, USBTINY_POWERDOWN, 0x0A, 0, 0, 0, USB_TIMEOUT);
-            
+
       usb_close(handletiny);
 
       break;
