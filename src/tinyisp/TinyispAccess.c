@@ -81,6 +81,27 @@ void DwenCommand(void) {
         //printf("initial fuseHighByte %02X \n",fuseHighByte);
         
         if ( (fuseHighByte&(1<<6))==0 ) goto END_TINYSPI_ACCESS;  //already in DWEN
+          
+        //Read low bits
+        usb_control_msg(handletiny, IN_FROM_LW, USBTINY_SPI, 0x0050, 0x00, (char *)spiExchange, 4, USB_TIMEOUT);
+        unsigned char fuseLowByte =  spiExchange[3];
+        //printf("initial fuseLowByte %02X \n",fuseLowByte);
+          
+        if ((fuseLowByte&0x0F) == 0x0F){  //CKSEL:1111 Ext Crystal OSC, 8M+
+          if ((fuseLowByte&0x30) == 0x30){  //SUT:11 Long boot time
+            //printf("Arduino default CLK \n");
+            fuseLowByte = (fuseLowByte&(~0x30))|(0x10);//SET SUT to 01
+            //printf("change low fuse %02X \n",fuseLowByte);
+            //Write low bits
+            usb_control_msg(handletiny, OUT_TO_LW, USBTINY_SPI, 0xA0AC, fuseLowByte<<8, 0, 0, USB_TIMEOUT);
+            delay(5);
+            usb_control_msg(handletiny, IN_FROM_LW, USBTINY_SPI, 0x0050, 0x00, (char *)spiExchange, 4, USB_TIMEOUT);
+            if (fuseLowByte !=  spiExchange[3]){
+              printf("fuseLowByte written %02X is not equal to read back value %02X\n",fuseLowByte,spiExchange[3]);
+              goto END_TINYSPI_ACCESS;
+            }
+          }
+        }
         
         //enable DWEN
         fuseHighByte &= ~(1<<6);
