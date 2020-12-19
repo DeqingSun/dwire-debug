@@ -1,4 +1,4 @@
-#define LISTEN_PORT 4444
+#define LISTEN_PORT 50000
 
 void GdbserverCommand(void)
 {

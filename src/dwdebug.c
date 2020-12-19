@@ -15,6 +15,18 @@
 
 
 int main(int argCount, char **argVector) {
+  if (argCount>4){
+    if ( (strcmp(argVector[1], "-c")==0) && (strcmp(argVector[2], "gdb_port 50000")==0) && (strcmp(argVector[3], "-s")==0) ){
+      fprintf( stderr, "Seems it is called by cortex-debug, do a dirty fix by replacing arg.\n");
+      char newArgVect1[] = "verbose,gdbserver,device";
+      char newArgVect2[] = "usbtiny1";
+      //verbose,gdbserver,device usbtiny1
+      argCount = 3;
+      argVector[1]=newArgVect1;
+      argVector[2]=newArgVect2;
+    }
+  }
+  
   systemstartup(argCount, argVector);
   UI();
   Exit(0);

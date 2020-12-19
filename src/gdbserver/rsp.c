@@ -224,6 +224,16 @@ void handle_command(int fd, const char *cmd)
                 cmd_clear_breakpoint(fd, cmd+2);
                 break;
             }
+        case 'q':
+            if (memcmp(cmd,"qRcmd,72657365742068616c74",26)==0) {
+                fprintf( stderr, "Got \"monitor reset halt\" cmd\n");
+                u8 buf[39];
+                memset(buf,0,39);
+                
+                target_write_registers(buf,39);
+                write_resp(fd, "0");
+                break;
+            }
         default:
             write_resp(fd, "");
             break;
