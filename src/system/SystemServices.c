@@ -237,6 +237,9 @@ int    ArgCount;
 #ifdef windows
   char *GetCommandParameters(void) {
     char *command = GetCommandLine();
+    if ((ArgCount == 3) && (strcmp("dwen,verbose,gdbserver,device",ArgVector[1])==0) && (strcmp("UsbTiny1",ArgVector[2])==0) ){
+      return "dwen,verbose,gdbserver,device UsbTiny1";
+    }
     while (*command  &&  *command <= ' ') {command++;}     // Skip leading spaces
     while (*command > ' ') {                               // Skip to blank after command filename
       if (*command == '"') {                               // Skip up to second double-quote of a pair, and anything in between
