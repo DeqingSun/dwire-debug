@@ -19,8 +19,8 @@ int main(int argCount, char **argVector) {
     if ( (strcmp(argVector[1], "-c")==0) && (strcmp(argVector[2], "gdb_port 50000")==0) && (strcmp(argVector[3], "-s")==0) ){
       fprintf( stderr, "Seems it is called by cortex-debug, do a dirty fix by replacing arg.\n");
       const char newArgVect1[] = "dwen,verbose,gdbserver,device";
-      const char newArgVect2[] = "usbtiny1";
-      //dwen,verbose,gdbserver,device usbtiny1
+      const char newArgVect2[] = "UsbTiny1";
+      //dwen,verbose,gdbserver,device UsbTiny1
       argCount = 3;
       argVector[1]=(char *)newArgVect1;
       argVector[2]=(char *)newArgVect2;

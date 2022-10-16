@@ -21,6 +21,7 @@
 // bit flag, and is arranged so that sending a 33 (send break and read pulse widths)
 // will abort a pending wait.
 
+#include <stdbool.h>
 
 
 #define USB_TIMEOUT 5000
