@@ -16,7 +16,27 @@
 
 int main(int argCount, char **argVector) {
   if (argCount>4){
-    if ( (strcmp(argVector[1], "-c")==0) && (strcmp(argVector[2], "gdb_port 50000")==0) && (strcmp(argVector[3], "-s")==0) ){
+    int arduinoPatternFound = 1;
+    //for Arduino 2.2.1, the command becomes:  -c "gdb_port 50000" -c "tcl_port 50001" -c "telnet_port 50002" -s PATH_TO_SOURCE_FOLDER -f "PATH_TO_openocd-helpers.tcl" -f PATH_TO_dwdebug
+    if ( (strcmp(argVector[1], "-c")==0) && (strcmp(argVector[2], "gdb_port 50000")==0) ){
+    }else{
+      arduinoPatternFound = 0;
+    }
+
+    if (arduinoPatternFound){
+      int sParameterFound = 0;
+      for (int i=3; i<argCount; i++){
+        if (strcmp(argVector[i], "-s")==0){
+          sParameterFound = 1;
+          break;
+        }
+      }
+      if (sParameterFound == 0){
+        arduinoPatternFound = 0;
+      }
+    }
+
+    if ( arduinoPatternFound ){
       fprintf( stderr, "Seems it is called by cortex-debug, do a dirty fix by replacing arg.\n");
       const char newArgVect1[] = "dwen,verbose,gdbserver,device";
       const char newArgVect2[] = "UsbTiny1";

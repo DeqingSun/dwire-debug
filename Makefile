@@ -17,7 +17,10 @@ ifndef  TOOLCHAIN_DIR
 
 CC = gcc
 
-all: run
+#all: run
+all: build
+
+build: $(BINARY)
 
 run: $(BINARY)
 	./$(BINARY)
