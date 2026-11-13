@@ -17,7 +17,10 @@ ifndef  TOOLCHAIN_DIR
 
 CC = gcc
 
-all: run
+#all: run
+all: build
+
+build: $(BINARY)
 
 run: $(BINARY)
 	./$(BINARY)
@@ -43,10 +46,16 @@ endif
 
 $(BINARY): */*/*.c */*.c Makefile
 ifdef WINDIR
-	i686-w64-mingw32-gcc -std=gnu99 -Wall -o $(BINARY) -Dwindows src/$(TARGET).c -lKernel32 -lowing -lComdlg32 -lWs2_32
+	#i686-w64-mingw32-gcc -std=gnu99 -Wall -o $(BINARY) -Dwindows src/$(TARGET).c -lKernel32 -lowing -lComdlg32 -lWs2_32
+	i686-w64-mingw32-gcc -std=gnu99 -Wall -o $(BINARY) -Dwindows src/$(TARGET).c -lKernel32 -lWinmm -lComdlg32 -lWs2_32
 else
-	#$(CC) -std=gnu99 -g -fno-pie -rdynamic -fPIC -Wall -o $(BINARY) src/$(TARGET).c -lusb -ldl
+ifeq ($(shell uname -s),Darwin)
+	# Mac OS X
 	$(CC) -std=gnu99 -g -fno-pie -rdynamic -fPIC -Wall -o $(BINARY) src/$(TARGET).c /usr/local/Cellar/libusb/1.0.23/lib/libusb-1.0.a /usr/local/Cellar/libusb-compat/0.1.5_1/lib/libusb.a -ldl -Wl,-framework,IOKit -Wl,-framework,CoreFoundation
+else
+	# Linux
+	$(CC) -std=gnu99 -g -fno-pie -rdynamic -fPIC -Wall -o $(BINARY) src/$(TARGET).c -lusb -ldl
+endif
 endif
 	ls -lap $(BINARY)
 
