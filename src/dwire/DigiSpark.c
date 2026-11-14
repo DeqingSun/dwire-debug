@@ -55,35 +55,39 @@ void FindUsbtinys(void) {
 
   int usbtinyindex = 1;
 
-  if (UsbInit()) {
-    usb_find_busses();
-    usb_find_devices();
+  if (!UsbInit()) {
+    // Windows needs libusb-win32 (libusb0.dll + that driver via Zadig). WinUSB will not work here.
+    Wsl("Note: USB (Digispark/UsbTiny) unavailable — libusb0.dll not loaded.");
+    return;
+  }
 
-    struct usb_bus *bus = usb_get_busses();
-    while (bus) {
+  usb_find_busses();
+  usb_find_devices();
 
-      struct usb_device *device = bus->devices;
-      while (device) {
+  struct usb_bus *bus = usb_get_busses();
+  while (bus) {
 
-        if (    device->descriptor.idVendor  == VENDOR_ID
-            &&  device->descriptor.idProduct == PRODUCT_ID) {
-          Assert(PortCount < countof(Ports));
-          Ports[PortCount] = malloc(sizeof(struct UPort));
-          Assert(Ports[PortCount]);
-          Ports[PortCount]->kind      = 'u';
-          Ports[PortCount]->index     = usbtinyindex++;
-          Ports[PortCount]->character = -1;              // Currently undetermined
-          Ports[PortCount]->baud      = 0;               // Currently undetermined
-          ((struct UPort*)Ports[PortCount])->handle = 0; // Currently unconnected
-          ((struct UPort*)Ports[PortCount])->device = device;
-          PortCount++;
-        }
+    struct usb_device *device = bus->devices;
+    while (device) {
 
-        device = device->next;
+      if (    device->descriptor.idVendor  == VENDOR_ID
+          &&  device->descriptor.idProduct == PRODUCT_ID) {
+        Assert(PortCount < countof(Ports));
+        Ports[PortCount] = malloc(sizeof(struct UPort));
+        Assert(Ports[PortCount]);
+        Ports[PortCount]->kind      = 'u';
+        Ports[PortCount]->index     = usbtinyindex++;
+        Ports[PortCount]->character = -1;              // Currently undetermined
+        Ports[PortCount]->baud      = 0;               // Currently undetermined
+        ((struct UPort*)Ports[PortCount])->handle = 0; // Currently unconnected
+        ((struct UPort*)Ports[PortCount])->device = device;
+        PortCount++;
       }
 
-      bus = bus->next;
+      device = device->next;
     }
+
+    bus = bus->next;
   }
 }
 

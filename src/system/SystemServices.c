@@ -319,7 +319,8 @@ void PrintLastError(const char *msg) {
   WWinError(GetLastError());
 }
 
-#define WinOK(fn) if(!(fn)) {DWORD winError = GetLastError(); Ws("Couldn't " #fn ": "); WWinError(winError); Exit(2);}
+// Use Fail (longjmp) not Exit so port probing in `ls` can skip bad COM devices.
+#define WinOK(fn) if(!(fn)) {DWORD winError = GetLastError(); Ws("Couldn't " #fn ": "); WWinError(winError); Fail("");}
 
 /// Windows specific error handling end.
 
