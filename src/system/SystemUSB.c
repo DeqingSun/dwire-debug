@@ -7,6 +7,8 @@
 
   // Minimal libusb-0.1 shaped API for DigiSpark.c / TinyispAccess.c.
   // Backed by libusb0.dll and/or libusb-1.0.dll at runtime.
+  //
+  // IMPORTANT: On Windows both libusb0 and libusb-1.0 export WINAPI (__stdcall).
 
   #define LIBUSB_PATH_MAX   512
   #define USB_TYPE_VENDOR   (0x02 << 5)
@@ -65,13 +67,13 @@
 
   // ---- libusb-0.1 (libusb-win32) ----
   static HINSTANCE lib0_mod = NULL;
-  static void            (*lib0_init)         (void) = NULL;
-  static int             (*lib0_find_busses)  (void) = NULL;
-  static int             (*lib0_find_devices) (void) = NULL;
-  static struct usb_bus *(*lib0_get_busses)   (void) = NULL;
-  static void           *(*lib0_open)         (void *dev) = NULL;
-  static int             (*lib0_close)        (void *dev) = NULL;
-  static int             (*lib0_control_msg)  (
+  static void            (WINAPI *lib0_init)         (void) = NULL;
+  static int             (WINAPI *lib0_find_busses)  (void) = NULL;
+  static int             (WINAPI *lib0_find_devices) (void) = NULL;
+  static struct usb_bus *(WINAPI *lib0_get_busses)   (void) = NULL;
+  static void           *(WINAPI *lib0_open)         (void *dev) = NULL;
+  static int             (WINAPI *lib0_close)        (void *dev) = NULL;
+  static int             (WINAPI *lib0_control_msg)  (
                            void *dev,
                            int requesttype, int request,
                            int value, int index,
@@ -79,6 +81,8 @@
                            int timeout) = NULL;
 
   // ---- libusb-1.0 (WinUSB backend) ----
+  // Packed like libusb.h on Windows (no extra padding between u8/u16 fields).
+  #pragma pack(push, 1)
   struct libusb_device_descriptor {
     unsigned char  bLength;
     unsigned char  bDescriptorType;
@@ -95,25 +99,26 @@
     unsigned char  iSerialNumber;
     unsigned char  bNumConfigurations;
   };
+  #pragma pack(pop)
 
   static HINSTANCE lib1_mod = NULL;
   static void *lib1_ctx = NULL;
-  static int   (*lib1_init)(void **ctx) = NULL;
-  static void  (*lib1_exit)(void *ctx) = NULL;
-  static intptr_t (*lib1_get_device_list)(void *ctx, void ***list) = NULL;
-  static void  (*lib1_free_device_list)(void **list, int unref) = NULL;
-  static int   (*lib1_get_device_descriptor)(void *dev, struct libusb_device_descriptor *desc) = NULL;
-  static int   (*lib1_open)(void *dev, void **handle) = NULL;
-  static void  (*lib1_close)(void *handle) = NULL;
-  static int   (*lib1_claim_interface)(void *handle, int iface) = NULL;
-  static int   (*lib1_control_transfer)(
+  static int   (WINAPI *lib1_init)(void **ctx) = NULL;
+  static void  (WINAPI *lib1_exit)(void *ctx) = NULL;
+  static intptr_t (WINAPI *lib1_get_device_list)(void *ctx, void ***list) = NULL;
+  static void  (WINAPI *lib1_free_device_list)(void **list, int unref) = NULL;
+  static int   (WINAPI *lib1_get_device_descriptor)(void *dev, struct libusb_device_descriptor *desc) = NULL;
+  static int   (WINAPI *lib1_open)(void *dev, void **handle) = NULL;
+  static void  (WINAPI *lib1_close)(void *handle) = NULL;
+  static int   (WINAPI *lib1_claim_interface)(void *handle, int iface) = NULL;
+  static int   (WINAPI *lib1_control_transfer)(
                  void *handle,
                  unsigned char request_type, unsigned char bRequest,
                  unsigned short wValue, unsigned short wIndex,
                  unsigned char *data, unsigned short wLength,
                  unsigned int timeout) = NULL;
-  static int   (*lib1_ref_device)(void *dev) = NULL;
-  static void  (*lib1_unref_device)(void *dev) = NULL;
+  static void *(WINAPI *lib1_ref_device)(void *dev) = NULL;
+  static void  (WINAPI *lib1_unref_device)(void *dev) = NULL;
 
   static struct usb_bus  win_bus;
   static struct usb_device *win_devices = NULL;
@@ -203,9 +208,8 @@
     win_bus.devices = NULL;
     win_bus.location = 0;
     win_bus.root_dev = NULL;
-    win_bus.dirname[0] = 0;
-    // dirname is only cosmetic for our single merged bus
-    win_bus.dirname[0] = 'w'; win_bus.dirname[1] = 0;
+    win_bus.dirname[0] = 'w';
+    win_bus.dirname[1] = 0;
 
     // libusb-win32 driver path
     if (lib0_mod) {
@@ -213,7 +217,7 @@
       lib0_find_devices();
       struct usb_bus *bus = lib0_get_busses();
       while (bus) {
-        // libusb0 returns devices with the classic layout; read descriptor fields.
+        // libusb0 device nodes match the classic layout for descriptor + next.
         struct usb_device *src = bus->devices;
         while (src) {
           AddDevice(USB_BACKEND_LIB0, src,
@@ -233,6 +237,7 @@
           struct libusb_device_descriptor desc;
           if (lib1_get_device_descriptor(list[i], &desc) != 0) continue;
           void *held = lib1_ref_device(list[i]);
+          if (!held) continue;
           AddDevice(USB_BACKEND_LIB1, held, desc.idVendor, desc.idProduct);
         }
         lib1_free_device_list(list, 1);
@@ -312,7 +317,6 @@
     return 1;
   }
 
-  // DigiSpark asks which backend loaded (for the note message).
   int UsbHasLibusb0(void) { return lib0_mod != NULL; }
   int UsbHasLibusb1(void) { return lib1_mod != NULL; }
 
