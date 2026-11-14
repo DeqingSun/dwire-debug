@@ -17,6 +17,13 @@ ifndef  TOOLCHAIN_DIR
 
 CC = gcc
 
+# macOS: libusb + libusb-compat. Search Homebrew, a user-local prefix, then /usr/local.
+ifeq ($(shell uname -s),Darwin)
+  USB_PREFIX := $(shell for p in "$$(brew --prefix 2>/dev/null)" "$(HOME)/.local" /opt/homebrew /usr/local; do \
+    if [ -f "$$p/include/usb.h" ] && [ -f "$$p/lib/libusb.a" ] && [ -f "$$p/lib/libusb-1.0.a" ]; then echo "$$p"; exit 0; fi; \
+  done; echo "$(HOME)/.local")
+endif
+
 #all: run
 all: build
 
@@ -51,7 +58,7 @@ ifdef WINDIR
 else
 ifeq ($(shell uname -s),Darwin)
 	# Mac OS X
-	$(CC) -std=gnu99 -g -fno-pie -rdynamic -fPIC -Wall -o $(BINARY) src/$(TARGET).c /usr/local/Cellar/libusb/1.0.23/lib/libusb-1.0.a /usr/local/Cellar/libusb-compat/0.1.5_1/lib/libusb.a -ldl -Wl,-framework,IOKit -Wl,-framework,CoreFoundation
+	$(CC) -std=gnu99 -g -fno-pie -rdynamic -fPIC -Wall -o $(BINARY) src/$(TARGET).c -I$(USB_PREFIX)/include $(USB_PREFIX)/lib/libusb.a $(USB_PREFIX)/lib/libusb-1.0.a -lobjc -ldl -Wl,-framework,IOKit -Wl,-framework,CoreFoundation -Wl,-framework,Security
 else
 	# Linux
 	$(CC) -std=gnu99 -g -fno-pie -rdynamic -fPIC -Wall -o $(BINARY) src/$(TARGET).c -lusb -ldl

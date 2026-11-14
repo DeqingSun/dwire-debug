@@ -1,0 +1,171 @@
+name: Build for Multiple OS
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+env:
+  # Same naming / layout as existing DWDebugTools packages; we only replace dwdebug.
+  PACKAGE_NAME: avr8debug-tools
+  BASE_MAC_URL: https://github.com/DeqingSun/unoDebugTestPackage/releases/download/0.0.6/avr8debug-tools_macosx-2023.09.08.tar.bz2
+  BASE_WIN_URL: https://github.com/DeqingSun/unoDebugTestPackage/releases/download/0.0.6/avr8debug-tools_mingw32-2023.09.08.tar.bz2
+
+jobs:
+  windows_build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-i686
+
+      - name: Build (cross-compile i686)
+        # WINDIR is how this Makefile selects the Windows / mingw path.
+        run: WINDIR=1 make
+
+      - name: Check binary
+        run: file dwdebug.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dwdebug-mingw32
+          path: dwdebug.exe
+
+  macos_build:
+    # macos-13 is Intel (x86_64), matching Arduino host x86_64-apple-darwin.
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libusb + libusb-compat
+        run: brew install libusb libusb-compat
+
+      - name: Build
+        run: make
+
+      - name: Check binary
+        run: |
+          file dwdebug
+          otool -L dwdebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dwdebug-macosx
+          path: dwdebug
+
+  release_packages:
+    needs: [windows_build, macos_build]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Resolve version stamp
+        id: ver
+        run: |
+          VER="$(date -u +%Y.%m.%d)"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "Using package version: ${VER}"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dwdebug-mingw32
+          path: bin-win
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dwdebug-macosx
+          path: bin-mac
+
+      - name: Repack base archives with new dwdebug
+        run: |
+          set -euo pipefail
+          VER="${{ steps.ver.outputs.version }}"
+          NAME="${PACKAGE_NAME}"
+          SHA="${{ github.sha }}"
+          REPO="${{ github.repository }}"
+          mkdir -p out work-mac work-win
+
+          curl -fsSL -o base-mac.tar.bz2 "${BASE_MAC_URL}"
+          curl -fsSL -o base-win.tar.bz2 "${BASE_WIN_URL}"
+
+          tar xjf base-mac.tar.bz2 -C work-mac
+          tar xjf base-win.tar.bz2 -C work-win
+
+          # Expected layout from the 0.0.6 base packages:
+          #   tools/macosx/{dwdebug,info.txt,arm-none-eabi-gdb,avr-gdb}
+          #   tools/win/{dwdebug.exe,arm-none-eabi-gdb.exe,avr-gdb.exe}
+          test -f work-mac/tools/macosx/avr-gdb
+          test -f work-mac/tools/macosx/arm-none-eabi-gdb
+          test -f work-win/tools/win/avr-gdb.exe
+          test -f work-win/tools/win/arm-none-eabi-gdb.exe
+
+          install -m 755 bin-mac/dwdebug work-mac/tools/macosx/dwdebug
+          install -m 755 bin-win/dwdebug.exe work-win/tools/win/dwdebug.exe
+
+          # Refresh mac info.txt (win package historically had none).
+          {
+            echo "arm-none-eabi-gdb is a copy of avr-gdb"
+            echo
+            echo "dwdebug is compiled with"
+            echo "https://github.com/${REPO}/commit/${SHA}"
+          } > work-mac/tools/macosx/info.txt
+
+          echo "===== mac package contents ====="
+          find work-mac -type f -exec ls -la {} \;
+          echo "===== win package contents ====="
+          find work-win -type f -exec ls -la {} \;
+
+          tar -C work-mac -cjf "out/${NAME}_macosx-${VER}.tar.bz2" tools
+          tar -C work-win -cjf "out/${NAME}_mingw32-${VER}.tar.bz2" tools
+
+          echo "===== archive listings ====="
+          tar tjvf "out/${NAME}_macosx-${VER}.tar.bz2"
+          tar tjvf "out/${NAME}_mingw32-${VER}.tar.bz2"
+
+          python3 <<'PY'
+          import hashlib, json, os, pathlib
+
+          ver = os.environ["VER"]
+          name = os.environ["NAME"]
+          out = pathlib.Path("out")
+
+          systems = [
+              ("x86_64-apple-darwin", f"{name}_macosx-{ver}.tar.bz2"),
+              ("i686-mingw32",        f"{name}_mingw32-{ver}.tar.bz2"),
+          ]
+
+          entries = []
+          for host, archive in systems:
+              path = out / archive
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              entries.append({
+                  "host": host,
+                  "url": f"<upload-and-fill-in>/{archive}",
+                  "archiveFileName": archive,
+                  "checksum": f"SHA-256:{digest}",
+                  "size": str(path.stat().st_size),
+              })
+
+          fragment = {
+              "name": "DWDebugTools",
+              "version": ver,
+              "systems": entries,
+          }
+          (out / "package_index_fragment.json").write_text(
+              json.dumps(fragment, indent=4) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(fragment, indent=4))
+          PY
+        env:
+          VER: ${{ steps.ver.outputs.version }}
+          NAME: ${{ env.PACKAGE_NAME }}
+          BASE_MAC_URL: ${{ env.BASE_MAC_URL }}
+          BASE_WIN_URL: ${{ env.BASE_WIN_URL }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: avr8debug-tools-packages
+          path: out/*
