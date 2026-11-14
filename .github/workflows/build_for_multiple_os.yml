@@ -12,6 +12,8 @@ env:
   PACKAGE_NAME: avr8debug-tools
   BASE_MAC_URL: https://github.com/DeqingSun/unoDebugTestPackage/releases/download/0.0.6/avr8debug-tools_macosx-2023.09.08.tar.bz2
   BASE_WIN_URL: https://github.com/DeqingSun/unoDebugTestPackage/releases/download/0.0.6/avr8debug-tools_mingw32-2023.09.08.tar.bz2
+  LIBUSB_VERSION: "1.0.27"
+  LIBUSB_COMPAT_VERSION: "0.1.8"
 
 jobs:
   windows_build:
@@ -37,20 +39,87 @@ jobs:
           path: dwdebug.exe
 
   macos_build:
-    # macos-13 is Intel (x86_64), matching Arduino host x86_64-apple-darwin.
-    runs-on: macos-13
+    # Single Apple Silicon runner: native arm64 + cross -arch x86_64, then lipo.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install libusb + libusb-compat
+      - name: Install brew deps (arm64 libusb for native slice)
         run: brew install libusb libusb-compat
 
-      - name: Build
-        run: make
-
-      - name: Check binary
+      - name: Build arm64 slice
         run: |
+          make clean || true
+          make
           file dwdebug
+          lipo -info dwdebug
+          otool -L dwdebug
+          mv dwdebug dwdebug-arm64
+
+      - name: Build x86_64 libusb (static) from source
+        run: |
+          set -euo pipefail
+          PREFIX="${RUNNER_TEMP}/usb-x86_64"
+          mkdir -p "${PREFIX}" src-usb
+          cd src-usb
+
+          curl -fsSL -o libusb.tar.bz2 \
+            "https://github.com/libusb/libusb/releases/download/v${LIBUSB_VERSION}/libusb-${LIBUSB_VERSION}.tar.bz2"
+          tar xjf libusb.tar.bz2
+          pushd "libusb-${LIBUSB_VERSION}"
+          ./configure --disable-shared --enable-static --prefix="${PREFIX}" \
+            CFLAGS="-arch x86_64 -O2" LDFLAGS="-arch x86_64" \
+            --host=x86_64-apple-darwin
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+          popd
+
+          curl -fsSL -o libusb-compat.tar.bz2 \
+            "https://github.com/libusb/libusb-compat-0.1/releases/download/v${LIBUSB_COMPAT_VERSION}/libusb-compat-${LIBUSB_COMPAT_VERSION}.tar.bz2"
+          tar xjf libusb-compat.tar.bz2
+          pushd "libusb-compat-${LIBUSB_COMPAT_VERSION}"
+          ./configure --disable-shared --enable-static --prefix="${PREFIX}" \
+            CFLAGS="-arch x86_64 -O2" LDFLAGS="-arch x86_64" \
+            LIBUSB_1_0_CFLAGS="-I${PREFIX}/include/libusb-1.0" \
+            LIBUSB_1_0_LIBS="-L${PREFIX}/lib -lusb-1.0" \
+            --host=x86_64-apple-darwin
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+          popd
+
+          # Makefile expects include/usb.h and lib/libusb.a + lib/libusb-1.0.a
+          test -f "${PREFIX}/include/usb.h"
+          test -f "${PREFIX}/lib/libusb.a"
+          test -f "${PREFIX}/lib/libusb-1.0.a"
+          lipo -info "${PREFIX}/lib/libusb.a"
+          lipo -info "${PREFIX}/lib/libusb-1.0.a"
+          echo "USB_X64_PREFIX=${PREFIX}" >> "$GITHUB_ENV"
+
+      - name: Build x86_64 slice
+        run: |
+          set -euo pipefail
+          make clean || true
+          # Force x86_64 compile/link against the cross-built static libusb.
+          gcc -arch x86_64 -std=gnu99 -g -fno-pie -Wall \
+            -o dwdebug-x86_64 src/dwdebug.c \
+            -I"${USB_X64_PREFIX}/include" \
+            "${USB_X64_PREFIX}/lib/libusb.a" \
+            "${USB_X64_PREFIX}/lib/libusb-1.0.a" \
+            -lobjc -ldl \
+            -Wl,-framework,IOKit \
+            -Wl,-framework,CoreFoundation \
+            -Wl,-framework,Security
+          file dwdebug-x86_64
+          lipo -info dwdebug-x86_64
+          otool -L dwdebug-x86_64
+
+      - name: Create universal binary
+        run: |
+          set -euo pipefail
+          lipo -create -output dwdebug dwdebug-arm64 dwdebug-x86_64
+          chmod 755 dwdebug
+          file dwdebug
+          lipo -info dwdebug
           otool -L dwdebug
 
       - uses: actions/upload-artifact@v4
@@ -109,7 +178,7 @@ jobs:
           {
             echo "arm-none-eabi-gdb is a copy of avr-gdb"
             echo
-            echo "dwdebug is compiled with"
+            echo "dwdebug is a universal (arm64 + x86_64) binary compiled with"
             echo "https://github.com/${REPO}/commit/${SHA}"
           } > work-mac/tools/macosx/info.txt
 
@@ -132,9 +201,14 @@ jobs:
           name = os.environ["NAME"]
           out = pathlib.Path("out")
 
+          mac_archive = f"{name}_macosx-{ver}.tar.bz2"
+          win_archive = f"{name}_mingw32-{ver}.tar.bz2"
+
+          # Same universal mac archive advertised for both Apple hosts.
           systems = [
-              ("x86_64-apple-darwin", f"{name}_macosx-{ver}.tar.bz2"),
-              ("i686-mingw32",        f"{name}_mingw32-{ver}.tar.bz2"),
+              ("x86_64-apple-darwin", mac_archive),
+              ("arm64-apple-darwin",  mac_archive),
+              ("i686-mingw32",        win_archive),
           ]
 
           entries = []
