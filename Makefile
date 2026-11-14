@@ -53,8 +53,8 @@ endif
 
 $(BINARY): */*/*.c */*.c Makefile
 ifdef WINDIR
-	#i686-w64-mingw32-gcc -std=gnu99 -Wall -o $(BINARY) -Dwindows src/$(TARGET).c -lKernel32 -lowing -lComdlg32 -lWs2_32
-	i686-w64-mingw32-gcc -std=gnu99 -Wall -o $(BINARY) -Dwindows src/$(TARGET).c -lKernel32 -lWinmm -lComdlg32 -lWs2_32
+	# Lowercase -l names are required for Linux-hosted mingw cross-link (case-sensitive fs).
+	i686-w64-mingw32-gcc -std=gnu99 -Wall -o $(BINARY) -Dwindows src/$(TARGET).c -lkernel32 -lwinmm -lcomdlg32 -lws2_32
 else
 ifeq ($(shell uname -s),Darwin)
 	# Mac OS X
