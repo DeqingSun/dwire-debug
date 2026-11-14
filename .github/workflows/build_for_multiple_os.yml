@@ -14,6 +14,7 @@ env:
   BASE_WIN_URL: https://github.com/DeqingSun/unoDebugTestPackage/releases/download/0.0.6/avr8debug-tools_mingw32-2023.09.08.tar.bz2
   LIBUSB_VERSION: "1.0.27"
   LIBUSB_COMPAT_VERSION: "0.1.8"
+  LIBUSB0_VERSION: "1.4.0.2"
 
 jobs:
   windows_build:
@@ -21,14 +22,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install MinGW
+      - name: Install MinGW + 7z
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-mingw-w64-i686
+          sudo apt-get install -y gcc-mingw-w64-i686 p7zip-full
 
       - name: Build (cross-compile i686)
         # WINDIR is how this Makefile selects the Windows / mingw path.
         run: WINDIR=1 make
+
+      - name: Fetch libusb DLLs (WinUSB + libusb-win32)
+        run: |
+          set -euo pipefail
+
+          # libusb-1.0.dll — WinUSB backend
+          curl -fsSL -o libusb.7z \
+            "https://github.com/libusb/libusb/releases/download/v${LIBUSB_VERSION}/libusb-${LIBUSB_VERSION}.7z"
+          7z x -y libusb.7z
+          DLL1="$(find . -path '*MinGW32*libusb-1.0.dll' -type f | head -n1)"
+          test -n "$DLL1"
+          cp "$DLL1" libusb-1.0.dll
+
+          # libusb0.dll — libusb-win32 backend (x86 package names it libusb0_x86.dll)
+          curl -fsSL -o libusb0.zip \
+            "https://github.com/mcuee/libusb-win32/releases/download/release_${LIBUSB0_VERSION}/libusb-win32-bin-${LIBUSB0_VERSION}.zip"
+          unzip -o libusb0.zip
+          DLL0="$(find . -path '*/bin/x86/libusb0_x86.dll' -type f | head -n1)"
+          test -n "$DLL0"
+          cp "$DLL0" libusb0.dll
+
+          file libusb-1.0.dll libusb0.dll
+          ls -la dwdebug.exe libusb-1.0.dll libusb0.dll
 
       - name: Check binary
         run: file dwdebug.exe
@@ -36,7 +60,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dwdebug-mingw32
-          path: dwdebug.exe
+          path: |
+            dwdebug.exe
+            libusb-1.0.dll
+            libusb0.dll
 
   macos_build:
     # Single Apple Silicon runner: native arm64 + cross -arch x86_64, then lipo.
@@ -173,6 +200,15 @@ jobs:
 
           install -m 755 bin-mac/dwdebug work-mac/tools/macosx/dwdebug
           install -m 755 bin-win/dwdebug.exe work-win/tools/win/dwdebug.exe
+          # Both DLLs side-by-side with dwdebug.exe:
+          #   libusb-1.0.dll → WinUSB (Zadig WinUSB)
+          #   libusb0.dll    → libusb-win32 (Zadig libusb-win32)
+          if [ -f bin-win/libusb-1.0.dll ]; then
+            install -m 644 bin-win/libusb-1.0.dll work-win/tools/win/libusb-1.0.dll
+          fi
+          if [ -f bin-win/libusb0.dll ]; then
+            install -m 644 bin-win/libusb0.dll work-win/tools/win/libusb0.dll
+          fi
 
           # Refresh mac info.txt (win package historically had none).
           {

@@ -291,6 +291,10 @@ void DwListDevices(void) {
     Fail("No devices available.");
   } else {
     int i;
+    // Re-probe ports that previously failed (baud < 0), e.g. after driver change.
+    for (i=0; i<PortCount; i++) {
+      if (Ports[i]->baud < 0) {Ports[i]->baud = 0;}
+    }
     for (i=0; i<PortCount; i++) {
       if (Ports[i]->baud >= 0) {ConnectPort(i, 0);}
     }

@@ -56,8 +56,8 @@ void FindUsbtinys(void) {
   int usbtinyindex = 1;
 
   if (!UsbInit()) {
-    // Windows needs libusb-win32 (libusb0.dll + that driver via Zadig). WinUSB will not work here.
-    Wsl("Note: USB (Digispark/UsbTiny) unavailable — libusb0.dll not loaded.");
+    // Windows: need libusb0.dll (libusb-win32 via Zadig) and/or libusb-1.0.dll (WinUSB).
+    Wsl("Note: USB (Digispark/UsbTiny) unavailable — no libusb0.dll or libusb-1.0.dll.");
     return;
   }
 
